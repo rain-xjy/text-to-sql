@@ -127,43 +127,29 @@
         </div>
       </div>
 
-      <div class="chat-input">
-        <div class="input-toolbar">
-          <div class="left-tools">
-            <el-button type="text" class="toolbar-btn">
-              <el-icon><ChatDotRound /></el-icon>
-              快捷回复
-            </el-button>
-            <el-button type="text" class="toolbar-btn">
-              <el-icon><Search /></el-icon>
-              链接搜索
-            </el-button>
-          </div>
-        </div>
-        <div class="input-main">
-          <el-input
-            v-model="inputMessage"
-            type="textarea"
-            :rows="3"
-            placeholder="输入您的问题..."
-            @keyup.enter.ctrl="sendMessage"
-          />
-          <div class="input-actions">
-            <div class="right-tools">
-              <el-upload
-                class="upload-btn"
-                action="#"
-                :auto-upload="false"
-                :show-file-list="false"
-              >
-                <el-button type="text">
-                  <el-icon><Upload /></el-icon>
-                </el-button>
-              </el-upload>
-              <el-button type="primary" @click="sendMessage" :loading="loading">
-                发送
+      <div class="input-main">
+        <el-input
+          v-model="inputMessage"
+          type="textarea"
+          :rows="3"
+          placeholder="输入您的问题..."
+          @keyup.enter.ctrl="sendMessage"
+        />
+        <div class="input-actions">
+          <div class="right-tools">
+            <!-- <el-upload
+              class="upload-btn"
+              action="#"
+              :auto-upload="false"
+              :show-file-list="false"
+            >
+              <el-button type="text">
+                <el-icon><Upload /></el-icon>
               </el-button>
-            </div>
+            </el-upload> -->
+            <el-button type="primary" @click="sendMessage" :loading="loading">
+              发送
+            </el-button>
           </div>
         </div>
       </div>
@@ -301,7 +287,7 @@ watch(currentMessages, (newVal) => {
 }, { deep: true, immediate: true })
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .chat-container {
   display: flex;
   height: 100%;
@@ -419,36 +405,21 @@ watch(currentMessages, (newVal) => {
   display: block;
 }
 
-.chat-input {
-  background-color: #f2f3f5;
-  border-radius: 8px;
-  padding: 12px;
-}
-
-.input-toolbar {
-  margin-bottom: 8px;
-}
-
-.left-tools {
-  display: flex;
-  gap: 12px;
-}
-
-.toolbar-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: #606266;
-}
-
-.toolbar-btn .el-icon {
-  font-size: 16px;
-}
-
 .input-main {
-  background-color: #fff;
-  border-radius: 4px;
-  padding: 12px;
+  background-color: #e7e7e7;
+  border-radius: 40px;
+  padding: 20px;
+}
+
+.input-main :deep(.el-textarea__inner) {
+  border: none;
+  background-color: #e7e7e7;
+  padding: 0;
+  box-shadow: none;
+  &:focus {
+    box-shadow: none;
+    outline: none;
+  }
 }
 
 .input-actions {
