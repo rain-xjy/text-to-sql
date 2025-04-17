@@ -8,16 +8,18 @@
           开始新对话
         </el-button>
       </div>
+      <!-- :class="{ active: currentChatId === chat.id }" -->
       <div class="history-list">
         <div
           v-for="(chat, index) in chatHistory"
           :key="index"
           class="history-item"
-          :class="{ active: currentChatId === chat.id }"
-          @click="switchChat(chat.id)"
+          
+          @click="loadCommonQuery(chat)"
         >
           <el-icon><ChatDotRound /></el-icon>
-          <span>{{ chat.title }}</span>
+          <span class="query-title">{{ chat.descrption }}</span>
+          <!-- <span class="query-sql">{{ chat.executeSQL }}</span> -->
         </div>
       </div>
     </div>
@@ -35,26 +37,25 @@
             <div class="message-text">{{message.content}}</div>
           </div>
           
-          <div v-else>
+          <div v-if="message.role === 'assistant'">
             <div class="message-content">
               <div class="message-text">{{message.content}}</div>
             </div>
             <div class="ai-answer">
-              <div v-show="false" class="answer-header">
+              <!-- <div  class="answer-header">
                 <el-icon><ChatDotRound /></el-icon>
                 <span>AI助手</span>
                 <span class="time-info">已完成思考 (用时 10 秒)</span>
-              </div>
+              </div> -->
 
               <!-- 1. SQL思考过程 -->
-              <div v-if="message.sqlThinkingProcess" class="answer-section">
+              <!-- <div v-if="message.sqlThinkingProcess" class="answer-section">
                 <div class="section-title">SQL生成思考过程</div>
                 <div class="section-content thinking-process">
                   <div class="long-text-content">{{ message.sqlThinkingProcess }}</div>
                 </div>
                 <el-divider />
-              </div>
-
+              </div> -->
               <!-- 2. 查询结果(SQL代码) -->
               <div v-if="message.sqlQuery" class="answer-section">
                 <div class="section-title">查询结果</div>
@@ -68,9 +69,6 @@
                 </div>
                 <el-divider />
               </div>
-
-              
-
               <!-- 3. 图表配置代码 -->
               <div v-if="message.chartConfig" class="answer-section">
                 <div class="section-title">图表配置代码</div>
@@ -84,20 +82,14 @@
                 </div>
                 <el-divider />
               </div>
-
-              
-
               <!-- 4. 图表展示 -->
-              <div v-if="false" class="answer-section">
+              <div v-if="message.chartConfig" class="answer-section">
                 <div class="section-title">图表展示</div>
                 <div class="section-content chart-display">
-                  <img :src="chartImage" alt="查询结果图表" class="result-chart" />
+                  <div :ref="(el) => setChartRef(el, index)" class="result-chart"></div>
                 </div>
                 <el-divider />
               </div>
-
-              
-
               <!-- 5. 总结 -->
               <div v-if="message.summary" class="answer-section">
                 <div class="section-title">总结</div>
@@ -106,9 +98,6 @@
                 </div>
                 <el-divider />
               </div>
-
-             
-
               <!-- 6. 问题建议 -->
               <div v-if="message.suggestions" class="answer-section">
                 <div class="section-title">问题建议</div>
@@ -117,13 +106,29 @@
                 </div>
               </div>
             </div>
+
             <!-- 添加确认按钮组 -->
             <div v-if="message.role === 'assistant' && message.isConfirmation" class="confirm-actions">
-                <el-button type="primary" size="small" plain>是的,保存至训练集</el-button>
-                <el-button type="primary" size="small" plain>保存为常用问题</el-button>
-                <el-button type="danger" size="small" plain>不正确</el-button>
+                <el-button type="primary" size="small" @click="handleConfirmation(message)" plain>是的,保存至训练集</el-button>
+                <el-button type="primary" size="small" @click="saveCommonFunc" plain>保存为常用问题</el-button>
+                <el-button type="danger" size="small" @click="incorrectFunc(message)" plain>不正确</el-button>
             </div>
           </div>
+          <div v-if="message.role === 'sqlQuery' && sqlQueryVisible">
+            <div class="message-content">
+              <div class="message-text">请输入SQL：</div>
+              <div style="margin-top: 10px;"><el-input
+                v-model="inputSQL"
+                type="textarea"
+                :rows="5"
+                placeholder="输入SQL"
+              /></div>
+              <div style="margin-top: 10px;"><el-button type="primary" size="small" @click="executeSQL" :loading="loading">执行SQL</el-button></div>
+            </div>
+          </div>
+          <!-- <div v-show="true">
+
+          </div> -->
         </div>
       </div>
 
@@ -137,16 +142,6 @@
         />
         <div class="input-actions">
           <div class="right-tools">
-            <!-- <el-upload
-              class="upload-btn"
-              action="#"
-              :auto-upload="false"
-              :show-file-list="false"
-            >
-              <el-button type="text">
-                <el-icon><Upload /></el-icon>
-              </el-button>
-            </el-upload> -->
             <el-button type="primary" @click="sendMessage" :loading="loading">
               发送
             </el-button>
@@ -155,27 +150,101 @@
       </div>
     </div>
   </div>
+  <!-- 不正确反馈对话框 -->
+
+  <el-dialog
+    v-model="saveCommonVisible"
+    title="保存为常用问题"
+    width="60%"
+    :show-close="false"
+    center
+    class="common-query-dialog"
+  >
+    <div class="dialog-form">
+      <div class="form-item">
+        <div class="form-label"><span style="color: red;">*</span>问题描述：</div>
+        <el-input
+          v-model="commonQueryObj.descrption"
+          type="input"
+          placeholder="请输入描述"
+        />
+      </div>
+      <div class="form-item">
+        <div class="form-label">执行SQL：</div>
+        <el-input
+          v-model="commonQueryObj.executeSQL"
+          type="textarea"
+          :rows="4"
+        />
+      </div>
+      <div class="form-item">
+        <div class="form-label">图表配置：</div>
+        <el-input
+          v-model="commonQueryObj.chartConfig"
+          type="textarea"
+          :rows="4"
+        />
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <el-button class="save-btn" type="success" @click="saveCommonSubmitFunc()">保存</el-button>
+      <el-button class="cancel-btn" @click="saveCommonVisible = false">取消</el-button>
+    </div>
+  </el-dialog>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'  // 添加 watch 引入
-import { Plus, ChatDotRound, CopyDocument, Edit, Search, Upload } from '@element-plus/icons-vue'
+import { ref, onMounted, watch, nextTick } from 'vue'
+import { Plus, ChatDotRound, CopyDocument } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import Plotly from 'plotly.js-dist'
 
 // 聊天历史记录
-const chatHistory = ref([
-  { id: 1, title: '今天' },
-  { id: 2, title: '昨天' },
-  { id: 3, title: '7 天内' }
-])
-
+const commonQueries = ref([])
+const chatHistory = commonQueries
 // 当前聊天消息
 const currentMessages = ref([
   { 
     role: 'assistant', 
     content: '你好！我是AI助手，有什么我可以帮你的吗？'
-    
   }
 ])
+
+// 不正确反馈对话框
+const incorrectFeedback = ref('')
+// SQL 查询对话框
+const sqlQueryVisible = ref(false)
+const inputSQL = ref('')
+
+const commonQueryObj = ref({
+  descrption: '',
+  executeSQL: '',
+  chartConfig: ''
+})
+// 保存为常用问题
+const saveCommonVisible = ref(false)
+// 保存为常用问题 
+const saveCommonFunc = (message) => {
+  saveCommonVisible.value = true
+  const currentAssistantMessage = currentMessages.value[currentMessages.value.length - 2]
+  // console.log(currentAssistantMessage.chartConfig)
+  commonQueryObj.value = {
+    descrption: '',
+    executeSQL: currentAssistantMessage.sqlQuery || '',
+    chartConfig: currentAssistantMessage.chartConfig || ''
+  }
+}
+const saveCommonSubmitFunc = () => {
+  if(commonQueryObj.value.descrption.trim() === '') {
+    ElMessage.error('请输入描述')
+    return
+  }
+  // commonQueryObj.value.descrption = commonQueryObj.value.descrption.trim()
+  // commonQueryObj.value.executeSQL = commonQueryObj.value.executeSQL.trim()
+  commonQueries.value.push(commonQueryObj.value)
+  saveCommonVisible.value = false
+}
+
 
 const currentChatId = ref(1)
 const inputMessage = ref('')
@@ -198,8 +267,14 @@ const startNewChat = () => {
 }
 
 // 切换对话
-const switchChat = (chatId) => {
-  currentChatId.value = chatId
+const loadCommonQuery = (query) => {
+  currentMessages.value = [{
+    role: 'assistant',
+    content: query.descrption,
+    sqlQuery: query.executeSQL,
+    chartConfig: query.chartConfig,
+    isConfirmation: false
+  }]
 }
 
 // 修改发送消息部分
@@ -219,34 +294,40 @@ const sendMessage = async () => {
     const aiResponse = {
       role: 'assistant', 
       content: '我是一个AI助手，可以帮助你解答问题！' ,
-      sqlThinkingProcess :'分析用户问题，确定需要查询的数据表和字段。根据问题描述，需要查询销售记录表中2023年的数据，按产品分组并计算销售总额，然后按销售额降序排列并限制结果为前5条记录。\n\n首先，我需要确定查询涉及的表：\n1. 销售记录表(sales)：包含销售日期(sale_date)和销售金额(amount)\n2. 产品表(products)：包含产品ID和产品名称(product_name)\n\n这两个表通过产品ID(product_id)关联。我需要：\n- 筛选2023年的销售记录\n- 按产品分组并计算每个产品的销售总额\n- 按销售总额降序排序\n- 只返回前5条记录\n\n这个查询需要使用JOIN操作连接两个表，使用SUM聚合函数计算销售总额，使用GROUP BY按产品分组，使用ORDER BY按销售额排序，最后使用LIMIT限制结果数量。',
-      sqlQuery: 'ELECT p.product_name, SUM(s.amount) as total_sales\nFROM sales s\nJOIN products p ON s.product_id = p.id\nWHERE YEAR(s.sale_date) = 2023\nGROUP BY p.product_name\nORDER BY total_sales DESC\nLIMIT 10;',
-      chartConfig: `{
-        title: {
-          text: '2023年销售额前五的产品'
-        },
-        tooltip: {
-          trigger: 'axis',
-          axisPointer: {
-            type: 'shadow'
-          }
-        },
-        xAxis: {
-          type: 'category',
-          data: ['产品A', '产品B', '产品C', '产品D', '产品E']
-        },
-        yAxis: {
-          type: 'value'
-        },
-        series: [{
-          data: [120, 100, 80, 70, 60],
+      sqlThinkingProcess :'分析用户问题...',
+      sqlQuery: 'SELECT...',
+      chartConfig: {
+        data: [{
+          x: ['产品A', '产品B', '产品C', '产品D', '产品E'],
+          y: [120, 100, 80, 70, 60],
           type: 'bar'
-        }]
-      }`,
+        }],
+        layout: {
+          title: '2023年销售额前五的产品',
+          xaxis: { title: '产品名称' },
+          yaxis: { title: '销售额（万元）' }
+        }
+      },
       summary: '根据查询结果，2023年销售额最高的产品是产品A，销售额为120万元，其次是产品B和产品C，销售额分别为100万元和80万元。前五名产品的销售总额占全年销售总额的65%。\n\n从数据分析来看，产品A的市场表现特别突出，比第二名产品B高出20%的销售额。这五款产品构成了公司主要的收入来源，其中前三名产品贡献了总销售额的近50%，显示出较高的产品集中度。\n\n值得注意的是，虽然产品D和产品E的销售额相对较低，但它们仍然进入了前五名',
       suggestions: '您可以进一步分析这些产品的月度销售趋势，或者查询这些产品在不同地区的销售情况，以便更全面地了解销售表现。\n\n以下是一些可能有价值的后续分析方向：\n\n1. 季节性分析：查看这些产品在不同季节的销售表现，识别是否存在季节性波动\n2. 客户细分：分析购买这些产品的客户类型，了解不同客户群体的偏好\n3. 价格敏感度：研究价格变动对这些产品销售量的影响',
       displaying: true
     }
+
+    nextTick(() => {
+      const currentChartRef = chartRefs.value.filter((el) => el)[0]
+      console.log('currentChartRef:', currentChartRef);
+
+      try {
+        if (currentChartRef) {
+          Plotly.newPlot(currentChartRef, 
+          aiResponse.chartConfig.data, 
+          aiResponse.chartConfig.layout);
+        }
+      } catch (error) {
+        console.error('图表渲染失败:', error);
+      }
+    });
+
     currentMessages.value.push(aiResponse)
 
     // 添加确认消息
@@ -264,6 +345,16 @@ const sendMessage = async () => {
   }, 1000)
 }
 
+// 存储所有图表的 DOM 引用
+const chartRefs = ref([])
+// 动态绑定 ref 到数组
+const setChartRef = (el, index) => {
+  if (el && chartRefs.value[index]) {
+    Plotly.purge(el);
+  }
+  chartRefs.value[index] = el;
+};
+
 // 滚动到底部
 const scrollToBottom = () => {
   setTimeout(() => {
@@ -271,6 +362,67 @@ const scrollToBottom = () => {
       messageContainer.value.scrollTop = messageContainer.value.scrollHeight
     }
   }, 100)
+}
+//保存至训练集
+const handleConfirmation = (message) => {
+  
+}
+
+// 不正确 
+const incorrectFunc = (message) => {
+  sqlQueryVisible.value = true
+  const userMessage = {
+    role: 'sqlQuery',
+    content: inputSQL.value
+  }
+  currentMessages.value.push(userMessage)
+  
+}
+
+// 执行SQL
+const executeSQL = () => {
+  if (!inputSQL.value.trim()) return
+  inputMessage.value = ''
+  // 模拟AI响应
+  loading.value = true
+  setTimeout(() => {
+    const aiResponse = {
+      role: 'assistant', 
+      content: '我是一个AI助手，可以帮助你解答问题！' ,
+      sqlThinkingProcess :'分析用户问题...',
+      sqlQuery: 'SELECT...',
+      chartConfig: {
+        data: [{
+          x: ['产品A', '产品B', '产品C', '产品D', '产品E'],
+          y: [120, 100, 80, 70, 60],
+          type: 'bar'
+        }],
+        layout: {
+          title: '2023年销售额前五的产品',
+          xaxis: { title: '产品名称' },
+          yaxis: { title: '销售额（万元）' }
+        }
+      },
+      summary: '根据查询结果，2023年销售额最高的产品是产品A，销售额为120万元，其次是产品B和产品C，销售额分别为100万元和80万元。前五名产品的销售总额占全年销售总额的65%。\n\n从数据分析来看，产品A的市场表现特别突出，比第二名产品B高出20%的销售额。这五款产品构成了公司主要的收入来源，其中前三名产品贡献了总销售额的近50%，显示出较高的产品集中度。\n\n值得注意的是，虽然产品D和产品E的销售额相对较低，但它们仍然进入了前五名',
+      suggestions: '您可以进一步分析这些产品的月度销售趋势，或者查询这些产品在不同地区的销售情况，以便更全面地了解销售表现。\n\n以下是一些可能有价值的后续分析方向：\n\n1. 季节性分析：查看这些产品在不同季节的销售表现，识别是否存在季节性波动\n2. 客户细分：分析购买这些产品的客户类型，了解不同客户群体的偏好\n3. 价格敏感度：研究价格变动对这些产品销售量的影响',
+      displaying: true
+    }
+
+    currentMessages.value.push(aiResponse)
+
+    // 添加确认消息
+    setTimeout(() => {
+      const confirmMessage = {
+        role: 'assistant',
+        content: '生成的结果是否正确?',
+        displaying: true,
+        isConfirmation: true  // 添加标识
+      }
+      currentMessages.value.push(confirmMessage)
+      loading.value = false
+      scrollToBottom()
+    }, 2000) // 延迟1.5秒后显示确认消息
+  }, 1000)
 }
 
 onMounted(() => {
@@ -281,9 +433,13 @@ onMounted(() => {
 // 监听消息变化
 watch(currentMessages, (newVal) => {
   const lastMessage = newVal[newVal.length - 1]
-  console.log('lastMessage', lastMessage.content)
+  // if (lastMessage.role === 'assistant') {
+  //   console.log('lastMessage', lastMessage)
+  // }
+  
   // if (lastMessage.role === 'assistant' && lastMessage.content !== '') {
   // }
+  
 }, { deep: true, immediate: true })
 </script>
 
@@ -294,8 +450,52 @@ watch(currentMessages, (newVal) => {
   background-color: #f5f7fa;
 }
 
+/* 常用问题对话框样式 */
+.common-query-dialog {
+  :deep(.el-dialog__header) {
+    padding-bottom: 10px;
+  }
+  
+  :deep(.el-dialog__body) {
+    padding: 10px 20px;
+  }
+  
+  .dialog-form {
+    .form-item {
+      display: flex;
+      margin-bottom: 15px;
+      .form-label {
+        white-space: normal;
+        word-wrap: break-word;
+        min-width: 80px;
+        margin-right: 12px;
+        margin-bottom: 5px;
+        font-size: 14px;
+      }
+    }
+  }
+  
+  .dialog-footer {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+    gap: 10px;
+    
+    .save-btn {
+      background-color: #67c23a;
+      border-color: #67c23a;
+    }
+    
+    .cancel-btn {
+      background-color: #f0f0f0;
+      border-color: #dcdfe6;
+      color: #606266;
+    }
+  }
+}
+
 .chat-history {
-  width: 260px;
+  width: 220px;
   background-color: #fff;
   border-right: 1px solid #e6e6e6;
   display: flex;
@@ -393,6 +593,19 @@ watch(currentMessages, (newVal) => {
   border: 1px solid #ebeef5;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
 }
+
+
+.message.sqlQuery .message-content {
+  min-width: 80%;
+  padding: 14px 18px;
+  border-radius: 12px;
+  position: relative;
+  background-color: rgb(166 195 99 / 30%);
+  color: #333;
+  border: 1px solid #ebeef5;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+}
+
 
 .message-actions {
   position: absolute;
@@ -571,4 +784,11 @@ watch(currentMessages, (newVal) => {
 .el-divider {
   margin: 24px 0;
 }
+
+// .dialog-footer {
+//   display: flex;
+//   justify-content: flex-end;
+//   gap: 10px;
+//   margin-top: 20px;
+// }
 </style>
