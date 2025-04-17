@@ -86,7 +86,7 @@
               <div v-if="message.chartConfig" class="answer-section">
                 <div class="section-title">图表展示</div>
                 <div class="section-content chart-display">
-                  <div :ref="(el) => setChartRef(el, index)" class="result-chart"></div>
+                  <div :ref="(el) => bindPlotRef(el, index)" class="result-chart"></div>
                 </div>
                 <el-divider />
               </div>
@@ -299,13 +299,13 @@ const sendMessage = async () => {
       chartConfig: {
         data: [{
           x: ['产品A', '产品B', '产品C', '产品D', '产品E'],
-          y: [120, 100, 80, 70, 60],
+          y: [Math.random()*100, 100, 80, 70, 60],
           type: 'bar'
         }],
         layout: {
-          title: '2023年销售额前五的产品',
+          title: "销售额统计",
           xaxis: { title: '产品名称' },
-          yaxis: { title: '销售额（万元）' }
+          yaxis: { title: "销售额" }
         }
       },
       summary: '根据查询结果，2023年销售额最高的产品是产品A，销售额为120万元，其次是产品B和产品C，销售额分别为100万元和80万元。前五名产品的销售总额占全年销售总额的65%。\n\n从数据分析来看，产品A的市场表现特别突出，比第二名产品B高出20%的销售额。这五款产品构成了公司主要的收入来源，其中前三名产品贡献了总销售额的近50%，显示出较高的产品集中度。\n\n值得注意的是，虽然产品D和产品E的销售额相对较低，但它们仍然进入了前五名',
@@ -313,20 +313,21 @@ const sendMessage = async () => {
       displaying: true
     }
 
-    nextTick(() => {
-      const currentChartRef = chartRefs.value.filter((el) => el)[0]
-      console.log('currentChartRef:', currentChartRef);
+    setTimeout(() => {
+      nextTick(() => {
+        try {
+            if (chartRef.value) {
+              Plotly.newPlot(chartRef.value, 
+              aiResponse.chartConfig.data, 
+              aiResponse.chartConfig.layout);
+            }
+          } catch (error) {
+            console.error('图表渲染失败:', error);
+          }
+      });
+    },400)
 
-      try {
-        if (currentChartRef) {
-          Plotly.newPlot(currentChartRef, 
-          aiResponse.chartConfig.data, 
-          aiResponse.chartConfig.layout);
-        }
-      } catch (error) {
-        console.error('图表渲染失败:', error);
-      }
-    });
+    // 延迟1秒后显示SQL生成思考过程
 
     currentMessages.value.push(aiResponse)
 
@@ -346,13 +347,12 @@ const sendMessage = async () => {
 }
 
 // 存储所有图表的 DOM 引用
-const chartRefs = ref([])
+const chartRef = ref(null)
 // 动态绑定 ref 到数组
-const setChartRef = (el, index) => {
-  if (el && chartRefs.value[index]) {
-    Plotly.purge(el);
+const bindPlotRef = (el, index) => {
+  if (el) {
+    chartRef.value = el;
   }
-  chartRefs.value[index] = el;
 };
 
 // 滚动到底部
@@ -436,7 +436,6 @@ watch(currentMessages, (newVal) => {
   // if (lastMessage.role === 'assistant') {
   //   console.log('lastMessage', lastMessage)
   // }
-  
   // if (lastMessage.role === 'assistant' && lastMessage.content !== '') {
   // }
   
