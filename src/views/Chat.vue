@@ -105,12 +105,16 @@
                   <div class="long-text-content">{{ message.suggestions }}</div>
                 </div>
               </div>
+              <div v-if="message.confirmMessage" class="message-content">
+                <div class="message-text">{{message.confirmMessage}}</div>
+              </div>
+
             </div>
 
             <!-- 添加确认按钮组 -->
             <div v-if="message.role === 'assistant' && message.isConfirmation" class="confirm-actions">
                 <el-button type="primary" size="small" @click="handleConfirmation(message)" plain>是的,保存至训练集</el-button>
-                <el-button type="primary" size="small" @click="saveCommonFunc" plain>保存为常用问题</el-button>
+                <el-button type="primary" size="small" @click="saveCommonFunc(message)" plain>保存为常用问题</el-button>
                 <el-button type="danger" size="small" @click="incorrectFunc(message)" plain>不正确</el-button>
             </div>
           </div>
@@ -226,12 +230,13 @@ const saveCommonVisible = ref(false)
 // 保存为常用问题 
 const saveCommonFunc = (message) => {
   saveCommonVisible.value = true
-  const currentAssistantMessage = currentMessages.value[currentMessages.value.length - 2]
+  console.log(message)
+  // const currentAssistantMessage = currentMessages.value[currentMessages.value.length - 2]
   // console.log(currentAssistantMessage.chartConfig)
   commonQueryObj.value = {
     descrption: '',
-    executeSQL: currentAssistantMessage.sqlQuery || '',
-    chartConfig: currentAssistantMessage.chartConfig || ''
+    executeSQL: message.sqlQuery || '',
+    chartConfig: message.chartConfig || ''
   }
 }
 const saveCommonSubmitFunc = () => {
@@ -256,6 +261,7 @@ const startNewChat = () => {
   currentMessages.value = [{
     role: 'assistant',
     content: '你好！我是AI助手，有什么我可以帮你的吗？',
+    confirmMessage: '',
     sqlThinkingProcess: '',
     sqlQuery: '',
     chartConfig: '',
@@ -294,6 +300,7 @@ const sendMessage = async () => {
     const aiResponse = {
       role: 'assistant', 
       content: '我是一个AI助手，可以帮助你解答问题！' ,
+      confirmMessage: '生成的结果是否正确?',
       sqlThinkingProcess :'分析用户问题...',
       sqlQuery: 'SELECT...',
       chartConfig: {
@@ -310,7 +317,8 @@ const sendMessage = async () => {
       },
       summary: '根据查询结果，2023年销售额最高的产品是产品A，销售额为120万元，其次是产品B和产品C，销售额分别为100万元和80万元。前五名产品的销售总额占全年销售总额的65%。\n\n从数据分析来看，产品A的市场表现特别突出，比第二名产品B高出20%的销售额。这五款产品构成了公司主要的收入来源，其中前三名产品贡献了总销售额的近50%，显示出较高的产品集中度。\n\n值得注意的是，虽然产品D和产品E的销售额相对较低，但它们仍然进入了前五名',
       suggestions: '您可以进一步分析这些产品的月度销售趋势，或者查询这些产品在不同地区的销售情况，以便更全面地了解销售表现。\n\n以下是一些可能有价值的后续分析方向：\n\n1. 季节性分析：查看这些产品在不同季节的销售表现，识别是否存在季节性波动\n2. 客户细分：分析购买这些产品的客户类型，了解不同客户群体的偏好\n3. 价格敏感度：研究价格变动对这些产品销售量的影响',
-      displaying: true
+      displaying: true,
+      isConfirmation: true  // 添加标识
     }
 
     setTimeout(() => {
@@ -332,17 +340,17 @@ const sendMessage = async () => {
     currentMessages.value.push(aiResponse)
 
     // 添加确认消息
-    setTimeout(() => {
-      const confirmMessage = {
-        role: 'assistant',
-        content: '生成的结果是否正确?',
-        displaying: true,
-        isConfirmation: true  // 添加标识
-      }
-      currentMessages.value.push(confirmMessage)
-      loading.value = false
-      scrollToBottom()
-    }, 2000) // 延迟1.5秒后显示确认消息
+    // setTimeout(() => {
+    //   const confirmMessage = {
+    //     role: 'assistant',
+    //     content: '生成的结果是否正确?',
+    //     displaying: true,
+    //     isConfirmation: true  // 添加标识
+    //   }
+    //   currentMessages.value.push(confirmMessage)
+    //   loading.value = false
+    //   scrollToBottom()
+    // }, 2000) // 延迟1.5秒后显示确认消息
   }, 1000)
 }
 
@@ -370,58 +378,69 @@ const handleConfirmation = (message) => {
 
 // 不正确 
 const incorrectFunc = (message) => {
+  console.log(message)
   sqlQueryVisible.value = true
   const userMessage = {
     role: 'sqlQuery',
-    content: inputSQL.value
+    content: message.sqlQuery
   }
   currentMessages.value.push(userMessage)
-  
 }
 
 // 执行SQL
 const executeSQL = () => {
   if (!inputSQL.value.trim()) return
-  inputMessage.value = ''
+  inputSQL.value = ''
   // 模拟AI响应
-  loading.value = true
+  // loading.value = true
   setTimeout(() => {
     const aiResponse = {
       role: 'assistant', 
       content: '我是一个AI助手，可以帮助你解答问题！' ,
+      confirmMessage: '生成的结果是否正确?',
       sqlThinkingProcess :'分析用户问题...',
       sqlQuery: 'SELECT...',
       chartConfig: {
         data: [{
           x: ['产品A', '产品B', '产品C', '产品D', '产品E'],
-          y: [120, 100, 80, 70, 60],
-          type: 'bar'
+          y: [120, 100, 80, 70, 60]
         }],
-        layout: {
-          title: '2023年销售额前五的产品',
-          xaxis: { title: '产品名称' },
-          yaxis: { title: '销售额（万元）' }
-        }
+        layout: {}
       },
       summary: '根据查询结果，2023年销售额最高的产品是产品A，销售额为120万元，其次是产品B和产品C，销售额分别为100万元和80万元。前五名产品的销售总额占全年销售总额的65%。\n\n从数据分析来看，产品A的市场表现特别突出，比第二名产品B高出20%的销售额。这五款产品构成了公司主要的收入来源，其中前三名产品贡献了总销售额的近50%，显示出较高的产品集中度。\n\n值得注意的是，虽然产品D和产品E的销售额相对较低，但它们仍然进入了前五名',
       suggestions: '您可以进一步分析这些产品的月度销售趋势，或者查询这些产品在不同地区的销售情况，以便更全面地了解销售表现。\n\n以下是一些可能有价值的后续分析方向：\n\n1. 季节性分析：查看这些产品在不同季节的销售表现，识别是否存在季节性波动\n2. 客户细分：分析购买这些产品的客户类型，了解不同客户群体的偏好\n3. 价格敏感度：研究价格变动对这些产品销售量的影响',
-      displaying: true
+      displaying: true,
+      isConfirmation: true  // 添加标识
     }
+
+    setTimeout(() => {
+      nextTick(() => {
+        try {
+            if (chartRef.value) {
+              Plotly.newPlot(chartRef.value, 
+              aiResponse.chartConfig.data, 
+              aiResponse.chartConfig.layout);
+            }
+          } catch (error) {
+            console.error('图表渲染失败:', error);
+          }
+      });
+    },400)
 
     currentMessages.value.push(aiResponse)
 
     // 添加确认消息
-    setTimeout(() => {
-      const confirmMessage = {
-        role: 'assistant',
-        content: '生成的结果是否正确?',
-        displaying: true,
-        isConfirmation: true  // 添加标识
-      }
-      currentMessages.value.push(confirmMessage)
-      loading.value = false
-      scrollToBottom()
-    }, 2000) // 延迟1.5秒后显示确认消息
+    // setTimeout(() => {
+    //   const confirmMessage = {
+    //     role: 'assistant',
+    //     content: '生成的结果是否正确?',
+    //     displaying: true,
+    //     isConfirmation: true  // 添加标识
+    //   }
+    //   currentMessages.value.push(confirmMessage)
+    //   loading.value = false
+    //   scrollToBottom()
+    // }, 2000) // 延迟1.5秒后显示确认消息
   }, 1000)
 }
 
@@ -659,6 +678,7 @@ watch(currentMessages, (newVal) => {
   display: flex;
   justify-content: left;
   margin-top: 12px;
+  padding: 0 20px;
 }
 
 .confirm-actions .el-button {
