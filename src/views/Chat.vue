@@ -100,9 +100,21 @@
               </div>
               <!-- 6. 问题建议 -->
               <div v-if="message.suggestions" class="answer-section">
-                <div class="section-title">问题建议</div>
+                <div class="section-title">相关问题</div>
                 <div class="section-content suggestions">
-                  <div class="long-text-content">{{ message.suggestions }}</div>
+                  <div class="related-questions">
+                    <el-button 
+                      v-for="(question, qIndex) in parseRelatedQuestions(message.suggestions)" 
+                      :key="qIndex"
+                      type="primary"
+                      size="small"
+                      plain
+                      class="question-btn"
+                      @click="askRelatedQuestion(question)"
+                    >
+                      {{ question }}
+                    </el-button>
+                  </div>
                 </div>
               </div>
               <div v-if="message.confirmMessage" class="message-content">
@@ -127,7 +139,7 @@
                 :rows="5"
                 placeholder="输入SQL"
               /></div>
-              <div style="margin-top: 10px;"><el-button type="primary" size="small" @click="executeSQL" :loading="loading">执行SQL</el-button></div>
+              <div style="margin-top: 10px;"><el-button type="primary" size="small" @click="executeSQLFunc" :loading="loading">执行SQL</el-button></div>
             </div>
           </div>
           <!-- <div v-show="true">
@@ -195,66 +207,79 @@
       <el-button class="cancel-btn" @click="saveCommonVisible = false">取消</el-button>
     </div>
   </el-dialog>
+  <!-- 数据表格界面 -->
+  <el-dialog
+    v-model="dataTableVisible"
+    title="常用问题数据"
+    width="80%"
+    :show-close="true"
+    center
+    class="data-table-dialog"
+  >
+    <div class="data-table-container">
+      <el-table :data="chatHistory" style="width: 100%" border>
+        <el-table-column prop="descrption" label="问题" min-width="150">
+          <template #default="scope">
+            <div class="table-cell-content">{{ scope.row.descrption }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="数据类型" width="120">
+          <template #default="scope">
+            <el-tag type="success" effect="plain" v-if="scope.row.chartConfig">图表</el-tag>
+            <el-tag type="info" effect="plain" v-else>数据</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="executeSQL" label="SQL" min-width="200">
+          <template #default="scope">
+            <div class="table-cell-content sql-content">{{ scope.row.executeSQL }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="150" fixed="right">
+          <template #default="scope">
+            <div class="table-actions">
+              <el-button type="primary" size="small" @click="editCommonQuery(scope.row, scope.$index)">
+                <el-icon><Edit /></el-icon>
+                编辑
+              </el-button>
+              <el-button type="danger" size="small" @click="deleteCommonQuery(scope.$index)">
+                <el-icon><Delete /></el-icon>
+                删除
+              </el-button>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+  </el-dialog>
 </template>
 
 <script setup>
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { ref, onMounted, watch, nextTick, onUnmounted } from 'vue'
 import { Plus, ChatDotRound, CopyDocument } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import Plotly from 'plotly.js-dist'
 
-// 聊天历史记录
-const commonQueries = ref([])
-const chatHistory = commonQueries
-// 当前聊天消息
-const currentMessages = ref([
-  { 
-    role: 'assistant', 
-    content: '你好！我是AI助手，有什么我可以帮你的吗？'
-  }
-])
 
-// 不正确反馈对话框
-const incorrectFeedback = ref('')
-// SQL 查询对话框
-const sqlQueryVisible = ref(false)
-const inputSQL = ref('')
-
-const commonQueryObj = ref({
-  descrption: '',
-  executeSQL: '',
-  chartConfig: ''
-})
-// 保存为常用问题
-const saveCommonVisible = ref(false)
-// 保存为常用问题 
-const saveCommonFunc = (message) => {
-  saveCommonVisible.value = true
-  console.log(message)
-  // const currentAssistantMessage = currentMessages.value[currentMessages.value.length - 2]
-  // console.log(currentAssistantMessage.chartConfig)
-  commonQueryObj.value = {
-    descrption: '',
-    executeSQL: message.sqlQuery || '',
-    chartConfig: message.chartConfig || ''
-  }
-}
-const saveCommonSubmitFunc = () => {
-  if(commonQueryObj.value.descrption.trim() === '') {
-    ElMessage.error('请输入描述')
-    return
-  }
-  // commonQueryObj.value.descrption = commonQueryObj.value.descrption.trim()
-  // commonQueryObj.value.executeSQL = commonQueryObj.value.executeSQL.trim()
-  commonQueries.value.push(commonQueryObj.value)
-  saveCommonVisible.value = false
-}
-
-
-const currentChatId = ref(1)
-const inputMessage = ref('')
+// 加载状态
 const loading = ref(false)
-const messageContainer = ref(null)
+const inputMessage = ref('')  // 底部输入框内容
+
+// 缓存字段
+const latestQuestion = ref('')
+const latestSQL = ref('')
+const latestChartConfig = ref((''))
+
+// 滚动到底部
+const scrollToBottom = () => {
+  setTimeout(() => {
+    if (messageContainer.value) {
+      messageContainer.value.scrollTo({
+        top: messageContainer.value.scrollHeight,
+        behavior: 'smooth'
+      })    
+    }
+  }, 100)
+}
 
 // 开始新对话
 const startNewChat = () => {
@@ -271,20 +296,9 @@ const startNewChat = () => {
   }]
   inputMessage.value = ''
 }
-
-// 切换对话
-const loadCommonQuery = (query) => {
-  currentMessages.value = [{
-    role: 'assistant',
-    content: query.descrption,
-    sqlQuery: query.executeSQL,
-    chartConfig: query.chartConfig,
-    isConfirmation: false
-  }]
-}
-
 // 修改发送消息部分
 const sendMessage = async () => {
+  latestQuestion.value = inputMessage.value
   if (!inputMessage.value.trim()) return
 
   const userMessage = {
@@ -336,63 +350,120 @@ const sendMessage = async () => {
     },400)
 
     // 延迟1秒后显示SQL生成思考过程
+    loading.value = false
 
+    latestSQL.value = aiResponse.sqlQuery
+    latestChartConfig.value = JSON.stringify(aiResponse.chartConfig)
     currentMessages.value.push(aiResponse)
-
-    // 添加确认消息
-    // setTimeout(() => {
-    //   const confirmMessage = {
-    //     role: 'assistant',
-    //     content: '生成的结果是否正确?',
-    //     displaying: true,
-    //     isConfirmation: true  // 添加标识
-    //   }
-    //   currentMessages.value.push(confirmMessage)
-    //   loading.value = false
-    //   scrollToBottom()
-    // }, 2000) // 延迟1.5秒后显示确认消息
+    scrollToBottom()
   }, 1000)
 }
 
-// 存储所有图表的 DOM 引用
-const chartRef = ref(null)
-// 动态绑定 ref 到数组
-const bindPlotRef = (el, index) => {
-  if (el) {
-    chartRef.value = el;
+/**
+ * 历史常用问题功能
+ * @commonQueries 定义的常用问题数组
+ * @chatHistory 历史常用问题
+ * @loadCommonQuery 切换常用问题函数
+ */
+const commonQueries = ref([])
+const chatHistory = commonQueries
+const loadCommonQuery = (query) => {
+  currentMessages.value = [{
+    role: 'assistant',
+    content: query.descrption,
+    sqlQuery: query.executeSQL,
+    chartConfig: query.chartConfig,
+    isConfirmation: false
+  }]
+}
+/**
+ * 聊天功能
+ * @currentMessages 聊天记录
+ * @messageContainer 聊天记录容器
+ * @currentChatId 当前聊天ID
+ * @loading 加载状态
+ */
+const currentMessages = ref([
+  { 
+    role: 'assistant', 
+    content: '你好！我是AI助手，有什么我可以帮你的吗？'
   }
-};
+])
+const messageContainer = ref(null)
+// const currentChatId = ref(1)
 
-// 滚动到底部
-const scrollToBottom = () => {
-  setTimeout(() => {
-    if (messageContainer.value) {
-      messageContainer.value.scrollTop = messageContainer.value.scrollHeight
-    }
-  }, 100)
+/**
+ * 保存为常用问题功能
+ * @commonQueryObj 定义的常用问题对象
+ * @saveCommonVisible 保存为常用问题对话框的显示状态
+ * @saveCommonFunc 保存为常用问题函数
+ * @saveCommonSubmitFunc 保存为常用问题提交函数
+ */
+const commonQueryObj = ref({
+  descrption: '',
+  executeSQL: '',
+  chartConfig: ''
+})
+const saveCommonVisible = ref(false)
+const saveCommonFunc = (message) => {
+  saveCommonVisible.value = true
+  // console.log(message)
+  commonQueryObj.value = {
+    descrption: '',
+    executeSQL: message.sqlQuery || '',
+    chartConfig: message.chartConfig || ''
+  }
 }
-//保存至训练集
-const handleConfirmation = (message) => {
-  
+const saveCommonSubmitFunc = () => {
+  if(commonQueryObj.value.descrption.trim() === '') {
+    ElMessage.error('请输入描述')
+    return
+  }
+  // commonQueryObj.value.descrption = commonQueryObj.value.descrption.trim()
+  // commonQueryObj.value.executeSQL = commonQueryObj.value.executeSQL.trim()
+  commonQueries.value.push(commonQueryObj.value)
+  saveCommonVisible.value = false
 }
 
-// 不正确 
+
+/**
+ * 当用户觉得回答不正确时，提供用户输入SQL的功能
+ * @sqlQueryVisible SQL输入框的显示状态
+ * @inputSQL 用户输入的SQL
+ * @incorrectFunc 不正确反馈函数
+ * @executeSQLFunc 执行SQL函数
+ */
+const sqlQueryVisible = ref(false)
+const inputSQL = ref('')
 const incorrectFunc = (message) => {
-  console.log(message)
-  sqlQueryVisible.value = true
+  // console.log(message)
+  if(!sqlQueryVisible.value) {
+    sqlQueryVisible.value = true
+    scrollToBottom()
+    const userMessage = {
+      role: 'sqlQuery',
+      content: message.sqlQuery
+    }
+    inputSQL.value = message.sqlQuery
+    currentMessages.value.push(userMessage)
+  }
+}
+const executeSQLFunc = () => {
+  if (!inputSQL.value.trim()) {
+    ElMessage.error('请输入SQL')
+    return
+  }
+  
   const userMessage = {
-    role: 'sqlQuery',
-    content: message.sqlQuery
+    role:'user',
+    content: inputSQL.value
   }
   currentMessages.value.push(userMessage)
-}
-
-// 执行SQL
-const executeSQL = () => {
-  if (!inputSQL.value.trim()) return
+  sqlQueryVisible.value = false
+  latestQuestion.value = inputSQL.value
   inputSQL.value = ''
   // 模拟AI响应
-  // loading.value = true
+  loading.value = true
   setTimeout(() => {
     const aiResponse = {
       role: 'assistant', 
@@ -426,26 +497,78 @@ const executeSQL = () => {
           }
       });
     },400)
+    latestSQL.value = aiResponse.sqlQuery
+    latestChartConfig.value = JSON.stringify(aiResponse.chartConfig)
 
     currentMessages.value.push(aiResponse)
-
-    // 添加确认消息
-    // setTimeout(() => {
-    //   const confirmMessage = {
-    //     role: 'assistant',
-    //     content: '生成的结果是否正确?',
-    //     displaying: true,
-    //     isConfirmation: true  // 添加标识
-    //   }
-    //   currentMessages.value.push(confirmMessage)
-    //   loading.value = false
-    //   scrollToBottom()
-    // }, 2000) // 延迟1.5秒后显示确认消息
+    scrollToBottom()
+    loading.value = false
+    sqlQueryVisible.value = false
   }, 1000)
 }
 
+
+/**
+ * 存储所有图表的 DOM 引用
+ * @param {*} el 图表 DOM 引用
+ * @chartRef  图表 DOM 引用
+ * @bindPlotRef 绑定图表 DOM 引用
+ */
+const chartRef = ref([])
+const bindPlotRef = (el, index) => {
+  if (el) {
+    chartRef.value = el
+  }
+};
+
+/**
+ * 解析问题建议为单独的问题列表
+ * @param {*} suggestions 问题建议
+ * @returns 问题列表
+ * @askRelatedQuestion 相关问题点击事件
+ */
+const parseRelatedQuestions = (suggestions) => {
+  if (!suggestions) return []
+  
+  // 尝试从文本中提取编号的问题
+  const questionRegex = /\d+\.\s*([^\n]+)/g
+  const matches = [...suggestions.matchAll(questionRegex)]
+  
+  if (matches.length > 0) {
+    // 如果找到编号的问题，返回这些问题
+    return matches.map(match => match[1].trim())
+  } else {
+    // 如果没有找到编号的问题，按换行符分割并过滤空行
+    return suggestions
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0 && !line.includes('以下是') && !line.includes('可能有'))
+      .slice(0, 3) // 限制最多显示3个问题
+  }
+}
+const askRelatedQuestion = (question) => {
+  inputMessage.value = question
+  sendMessage()
+}
+
+//保存至训练集
+const handleConfirmation = (message) => {
+  console.log('message', message)
+  console.log('latestQuestion', latestQuestion.value)
+  console.log('latestSQL', latestSQL.value)
+  console.log('latestChartConfig', latestChartConfig.value)
+
+}
+
+
 onMounted(() => {
   scrollToBottom()
+})
+
+// 组件卸载时清理
+onUnmounted(() => {
+  // chartRef.value.forEach(chart => Plotly.purge(chart))
+  // chartRef.value = []
 })
 
 
@@ -727,6 +850,25 @@ watch(currentMessages, (newVal) => {
 .section-content {
   color: #606266;
   line-height: 1.6;
+}
+
+.related-questions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.question-btn {
+  margin-bottom: 8px;
+  text-align: left;
+  white-space: normal;
+  height: auto;
+  padding: 8px 15px;
+  line-height: 1.4;
+}
+.question-btn + .question-btn {
+  margin-left: 0px;
 }
 
 .thinking-process {

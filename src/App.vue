@@ -25,6 +25,10 @@
           <el-icon><Comment /></el-icon>
           <span>AI对话</span>
         </el-menu-item>
+        <el-menu-item index="/dataset">
+          <el-icon><Document /></el-icon>
+          <span>数据集管理</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
