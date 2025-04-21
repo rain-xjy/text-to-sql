@@ -57,7 +57,7 @@
                 <el-divider />
               </div> -->
               <!-- 2. 查询结果(SQL代码) -->
-              <div v-if="message.sqlQuery" class="answer-section">
+              <div v-if="message.sqlQuery && displaySettings.showSqlQuery" class="answer-section">
                 <div class="section-title">查询结果</div>
                 <div class="section-content">
                   <div class="code-wrapper">
@@ -70,7 +70,7 @@
                 <el-divider />
               </div>
               <!-- 3. 图表配置代码 -->
-              <div v-if="message.chartConfig" class="answer-section">
+              <div v-if="message.chartConfig && displaySettings.showChartConfig" class="answer-section">
                 <div class="section-title">图表配置代码</div>
                 <div class="section-content">
                   <div class="code-wrapper">
@@ -83,7 +83,7 @@
                 <el-divider />
               </div>
               <!-- 4. 图表展示 -->
-              <div v-if="message.chartConfig" class="answer-section">
+              <div v-if="message.chartConfig && displaySettings.showChart" class="answer-section">
                 <div class="section-title">图表展示</div>
                 <div class="section-content chart-display">
                   <div :ref="(el) => bindPlotRef(el, index)" class="result-chart"></div>
@@ -91,7 +91,7 @@
                 <el-divider />
               </div>
               <!-- 5. 总结 -->
-              <div v-if="message.summary" class="answer-section">
+              <div v-if="message.summary && displaySettings.showSummary" class="answer-section">
                 <div class="section-title">总结</div>
                 <div class="section-content summary">
                   <div class="long-text-content">{{ message.summary }}</div>
@@ -99,7 +99,7 @@
                 <el-divider />
               </div>
               <!-- 6. 问题建议 -->
-              <div v-if="message.suggestions" class="answer-section">
+              <div v-if="message.suggestions && displaySettings.showSuggestions" class="answer-section">
                 <div class="section-title">相关问题</div>
                 <div class="section-content suggestions">
                   <div class="related-questions">
@@ -157,11 +157,37 @@
           @keyup.enter.ctrl="sendMessage"
         />
         <div class="input-actions">
-          <div class="right-tools">
+            <el-dropdown trigger="click" @command="handleDisplaySettings" :hide-on-click="false">
+              <el-button type="primary">
+                显示设置
+                <el-icon class="el-icon--right"><CaretBottom /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item>
+                    <el-checkbox v-model="displaySettings.showSqlQuery">生成SQL思考过程</el-checkbox>
+                  </el-dropdown-item>
+                  <el-dropdown-item>
+                    <el-checkbox v-model="displaySettings.showSqlResult">显示SQL查询结果</el-checkbox>
+                  </el-dropdown-item>
+                  <el-dropdown-item>
+                    <el-checkbox v-model="displaySettings.showChartConfig">显示图表配置</el-checkbox>
+                  </el-dropdown-item>
+                  <el-dropdown-item>
+                    <el-checkbox v-model="displaySettings.showChart">显示图表</el-checkbox>
+                  </el-dropdown-item>
+                  <el-dropdown-item>
+                    <el-checkbox v-model="displaySettings.showSummary">显示总结</el-checkbox>
+                  </el-dropdown-item>
+                  <el-dropdown-item>
+                    <el-checkbox v-model="displaySettings.showSuggestions">显示建议</el-checkbox>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
             <el-button type="primary" @click="sendMessage" :loading="loading">
               发送
             </el-button>
-          </div>
         </div>
       </div>
     </div>
@@ -255,7 +281,7 @@
 
 <script setup>
 import { ref, onMounted, watch, nextTick, onUnmounted } from 'vue'
-import { Plus, ChatDotRound, CopyDocument } from '@element-plus/icons-vue'
+import { Plus, ChatDotRound, CopyDocument, CaretBottom, Edit, Delete } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import Plotly from 'plotly.js-dist'
 
@@ -268,6 +294,23 @@ const inputMessage = ref('')  // 底部输入框内容
 const latestQuestion = ref('')
 const latestSQL = ref('')
 const latestChartConfig = ref((''))
+
+// 显示设置
+const displaySettings = ref({
+  showSqlQuery: true,
+  showSqlResult: true,
+  showChartConfig: true,
+  showChart: true,
+  showSummary: true,
+  showSuggestions: true
+})
+
+// 处理显示设置
+const handleDisplaySettings = (command) => {
+  // 这里的command参数在当前实现中没有使用，因为我们直接通过v-model绑定了复选框
+  // 但保留此函数以便未来扩展功能
+  console.log('显示设置已更新')
+}
 
 // 滚动到底部
 const scrollToBottom = () => {
@@ -778,7 +821,7 @@ watch(currentMessages, (newVal) => {
 
 .input-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   margin-top: 8px;
 }
